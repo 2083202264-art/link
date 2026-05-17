@@ -1,0 +1,12 @@
+{
+  "routes": [
+    {
+      "src": "/api/upload",
+      "dest": "/functions/upload/index"
+    },
+    {
+      "src": "/api/delete-photo",
+      "dest": "/functions/delete-photo/index"
+    }
+  ]
+}
