@@ -31,25 +31,56 @@ export default async function onRequest(context) {
 
     const host = `https://${bucket}`;
     const ossUrl = `${host}/${objectKey}`;
-    const date = new Date().toUTCString();
-    const signatureString = `DELETE\n\n\n${date}\n/${bucket}/${objectKey}`;
+
+    // --- OSS Signature V2 ---
+    const now = new Date();
+    const xOssDate = now.toISOString().replace(/\.\d{3}Z$/, 'Z');
+    
+    // V2 签名字符串
+    const signatureString = [
+      'DELETE',
+      '',           // Content-MD5 留空
+      '',           // Content-Type 留空（DELETE 无内容）
+      '',           // Headers（无额外签名头）
+      '/' + bucket + '/' + objectKey
+    ].join('\n');
 
     const encoder = new TextEncoder();
-    const keyData = await crypto.subtle.importKey(
+    
+    const dateKey = await crypto.subtle.importKey(
       'raw',
       encoder.encode(accessKeySecret),
-      { name: 'HMAC', hash: 'SHA-1' },
+      { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign']
     );
-    const signatureBytes = await crypto.subtle.sign('HMAC', keyData, encoder.encode(signatureString));
+    const dateSignature = await crypto.subtle.sign(
+      'HMAC',
+      dateKey,
+      encoder.encode(now.toISOString().slice(0, 10))
+    );
+    
+    const finalKey = await crypto.subtle.importKey(
+      'raw',
+      new Uint8Array(dateSignature),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const signatureBytes = await crypto.subtle.sign(
+      'HMAC',
+      finalKey,
+      encoder.encode(signatureString)
+    );
     const signature = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)));
+
+    const authorization = `OSS2 ${accessKeyId}:${signature}`;
 
     const response = await fetch(ossUrl, {
       method: 'DELETE',
       headers: {
-        'Authorization': `OSS ${accessKeyId}:${signature}`,
-        'Date': date
+        'Authorization': authorization,
+        'x-oss-date': xOssDate
       }
     });
 
