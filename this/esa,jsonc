@@ -1,0 +1,12 @@
+{
+  "routes": [
+    {
+      "src": "/api/upload",
+      "dest": "/edge-functions/upload/index"
+    },
+    {
+      "src": "/api/delete-photo",
+      "dest": "/edge-functions/delete-photo/index"
+    }
+  ]
+}
