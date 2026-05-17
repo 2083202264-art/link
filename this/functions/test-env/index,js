@@ -1,0 +1,10 @@
+export default async function onRequest(context) {
+  const { env } = context;
+  return new Response(JSON.stringify({
+    hasId: !!env.OSS_ACCESS_KEY_ID,
+    hasSecret: !!env.OSS_ACCESS_KEY_SECRET,
+    bucket: env.OSS_BUCKET || '未设置'
+  }), {
+    headers: { 'Content-Type': 'application/json; charset=utf-8' }
+  });
+}
