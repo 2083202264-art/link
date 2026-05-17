@@ -24,7 +24,7 @@ export default async function onRequest(context) {
 
     const accessKeyId = env.OSS_ACCESS_KEY_ID;
     const accessKeySecret = env.OSS_ACCESS_KEY_SECRET;
-    const bucket = env.OSS_BUCKET;
+    const bucket = env.OSS_BUCKET; // 格式: your-bucket.oss-cn-hangzhou.aliyuncs.com
 
     if (!accessKeyId || !accessKeySecret || !bucket) {
       return new Response(JSON.stringify({ error: 'OSS 环境变量未配置' }), {
@@ -33,13 +33,12 @@ export default async function onRequest(context) {
       });
     }
 
+    const host = `https://${bucket}`;
+    const ossUrl = `${host}/${objectKey}`;
     const date = new Date().toUTCString();
     const contentType = file.type || 'image/jpeg';
-
-    // 构建签名串
     const signatureString = `PUT\n\n${contentType}\n${date}\n/${bucket}/${objectKey}`;
 
-    // 计算签名
     const encoder = new TextEncoder();
     const keyData = await crypto.subtle.importKey(
       'raw',
@@ -51,21 +50,25 @@ export default async function onRequest(context) {
     const signatureBytes = await crypto.subtle.sign('HMAC', keyData, encoder.encode(signatureString));
     const signature = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)));
 
-    // ========== 调试：返回签名信息，暂不上传 ==========
-    return new Response(JSON.stringify({
-      debug: true,
-      accessKeyId: accessKeyId,
-      bucket: bucket,
-      objectKey: objectKey,
-      date: date,
-      contentType: contentType,
-      signatureString: signatureString,
-      signature: signature,
-      expectedUrl: `https://${bucket}/${objectKey}`
-    }), {
-      headers: { 'Content-Type': 'application/json; charset=utf-8' }
+    const response = await fetch(ossUrl, {
+      method: 'PUT',
+      body: file.stream(),
+      headers: {
+        'Authorization': `OSS ${accessKeyId}:${signature}`,
+        'Content-Type': contentType,
+        'Date': date,
+        'x-oss-storage-class': 'Standard'
+      }
     });
 
+    if (response.status === 200) {
+      return new Response(JSON.stringify({ url: ossUrl }), {
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      });
+    } else {
+      const errorText = await response.text();
+      throw new Error(`OSS upload failed: ${response.status} ${errorText}`);
+    }
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
